@@ -1,0 +1,92 @@
+const express = require('express');
+const router = express.Router();
+const products = require('./product')
+const mysql = require('mysql');
+
+const db = mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: '',
+    database: 'ekart'
+});
+
+db.connect((err) => {
+    if (err) {
+        throw err;
+    }
+    console.log('Connected to MySQL database');
+});
+
+router.get('/productList', (req, res) => {
+    res.status(200).json(products);
+});
+
+router.post('/checkout', async (req, res) => {
+    const userData = req.body.userData
+    const productList = req.body.productList
+    console.log('userData', userData)
+    if (userData && productList) {
+        const email = userData.email
+        const name = userData.name
+        const userId = await checkUserEmailAndGetId(name, email)
+        if (userId) {
+            await insertProductData(userId, productList)
+        }
+    }
+})
+
+const insertProductData = async (userId, productList) => {
+    console.log(userId, productList)
+    for (const item of productList) {
+        const { id, price, category } = item;
+        const insertQuery = 'INSERT INTO orders (user_id,productId,price,categoty) VALUES (?, ?, ?, ?)';
+
+        try {
+            await new Promise((resolve, reject) => {
+                db.query(insertQuery, [userId,id,price,category], (err, result) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve("Data Added",result);
+                });
+            });
+        } catch (error) {
+            console.error('Error inserting order item:', error);
+        }
+    }
+}
+
+const checkUserEmailAndGetId = async (name, email) => {
+    return new Promise((resolve, reject) => {
+        const checkUser = 'SELECT * FROM users WHERE email = ?';
+        db.query(checkUser, [email], (err, result) => {
+            if (err) {
+                console.error(err);
+                reject(err);
+                return;
+            }
+            if (result.length > 0) {
+                const userId = result[0].id;
+                console.log('User found with ID:', userId);
+                resolve(userId);
+            } else {
+                const insertQuery = 'INSERT INTO users (name, email) VALUES (?, ?)';
+                db.query(insertQuery, [name, email], (err, result) => {
+                    if (err) {
+                        console.error('Error inserting into user table:', err);
+                        reject(err);
+                        return;
+                    }
+                    const lastInsertId = result.insertId;
+                    resolve(lastInsertId);
+                });
+            }
+        });
+    });
+};
+
+
+
+
+module.exports = router;
